@@ -7,7 +7,7 @@
   "customer_id": null,
   "payload": {
     "metric": "calls",
-    "delta_pct": 0.15,
+    "delta_pct": 15,
     "window": "7d",
     "vs_baseline": 18,
     "likely_driver": "kids_yoga_post"

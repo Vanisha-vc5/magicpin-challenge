@@ -7,7 +7,7 @@
   "customer_id": null,
   "payload": {
     "metric": "calls",
-    "delta_pct": -0.5,
+    "delta_pct": -50,
     "window": "7d",
     "vs_baseline": 12
   },

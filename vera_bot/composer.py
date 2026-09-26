@@ -17,6 +17,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from models import MessageBrief
+from formatting import align_cta_body, format_percentage, relative_shortfall, resolve_cta
 
 logger = logging.getLogger("vera.composer")
 
@@ -59,8 +60,7 @@ class CategoryStrategy:
     def format_cta_line(self, cta: str, recommended_action: str) -> str:
         """Format the final CTA line."""
         if cta == "binary_yes_no":
-            action_short = recommended_action.split("—")[0].strip()[:60]
-            return f"Want me to {action_short.lower()}? Reply YES to proceed."
+            return "Reply YES to proceed."
         elif cta in ("multi_choice", "multi_choice_slot"):
             return "Reply 1 for first slot, 2 for second, or suggest a time that works."
         elif cta == "none":
@@ -181,10 +181,10 @@ def format_peer_benchmark(merchant: Dict, category: Optional[Dict]) -> Optional[
     my_ctr = perf.get("ctr")
     peer_ctr = ps.get("avg_ctr")
     if my_ctr and peer_ctr:
-        diff_pct = int(abs(peer_ctr - my_ctr) / peer_ctr * 100)
-        if diff_pct >= 15:
+        diff_pct = relative_shortfall(my_ctr, peer_ctr)
+        if diff_pct and diff_pct >= 15:
             direction = "below" if my_ctr < peer_ctr else "above"
-            return f"CTR {my_ctr:.3f} vs peer median {peer_ctr:.3f} ({diff_pct}% {direction} peer)"
+            return f"CTR {my_ctr:.3f} vs peer median {peer_ctr:.3f} ({format_percentage(diff_pct)} {direction} peer)"
 
     return None
 
@@ -753,6 +753,8 @@ def compose_message(
 
     # Enforce single CTA (no multiple "Reply X" lines)
     body = _enforce_single_cta(body)
+    cta = resolve_cta(brief.cta, body)
+    body = align_cta_body(body, cta)
 
     # Build template params (for first outbound WhatsApp template)
     salutation = strategy.salute(merchant, customer)
@@ -778,7 +780,7 @@ def compose_message(
 
     return {
         "body": body.strip(),
-        "cta": brief.cta,
+        "cta": cta,
         "send_as": brief.send_as,
         "template_name": template_name,
         "template_params": template_params,

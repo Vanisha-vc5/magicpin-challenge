@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from models import MessageBrief
+from formatting import format_inr, format_percentage, relative_shortfall
 
 logger = logging.getLogger("vera.facts")
 
@@ -23,24 +24,13 @@ logger = logging.getLogger("vera.facts")
 # ─────────────────────────────────────────────────────────────────────────────
 
 def fmt_pct(val: Optional[float], prefix: str = "") -> str:
-    """Format a float as a percentage string."""
-    if val is None:
-        return ""
-    pct = int(abs(val) * 100)
-    sign = "+" if val >= 0 else "-"
-    if prefix:
-        return f"{prefix}{pct}%"
-    return f"{sign}{pct}%"
+    """Format fields whose schema already expresses percentages as 0..100."""
+    result = format_percentage(val)
+    return f"{prefix}{result}" if result else ""
 
 
 def fmt_inr(val) -> str:
-    """Format a numeric value as an INR string."""
-    if val is None:
-        return ""
-    try:
-        return f"₹{int(val):,}"
-    except (ValueError, TypeError):
-        return str(val)
+    return format_inr(val)
 
 
 def get_active_offers(merchant: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -235,7 +225,7 @@ def _extract_perf_dip(trigger: Dict, merchant: Dict,
     metric = payload.get("metric", "calls")
     delta = payload.get("delta_pct", 0)
     window = payload.get("window", "7d")
-    baseline = payload.get("vs_baseline")
+    baseline = payload.get("vs_baseline", payload.get("baseline"))
 
     delta_str = fmt_pct(delta)
     primary = f"{metric} {delta_str} over {window}"
@@ -250,9 +240,12 @@ def _extract_perf_dip(trigger: Dict, merchant: Dict,
         peer_ctr = ps.get("avg_ctr")
         my_ctr = perf.get("ctr")
         if peer_ctr and my_ctr:
-            diff = int((peer_ctr - my_ctr) / peer_ctr * 100)
-            if diff > 0:
-                supporting.append(f"Your CTR {my_ctr:.3f} vs peer median {peer_ctr:.3f} ({diff}% gap)")
+            diff = relative_shortfall(my_ctr, peer_ctr)
+            if diff and diff > 0:
+                supporting.append(
+                    f"Your CTR {my_ctr:.3f} vs peer median {peer_ctr:.3f} "
+                    f"({format_percentage(diff)} relative shortfall)"
+                )
 
     active_offers = get_active_offers(merchant)
     offer_str = active_offers[0]["title"] if active_offers else ""
@@ -263,7 +256,7 @@ def _extract_perf_dip(trigger: Dict, merchant: Dict,
         "merchant_specific_reason": f"actionable signal for your listing",
         "recommended_action": f"Optimize listing to recover {metric}" + (
             f" — your {offer_str} is the hook" if offer_str else ""),
-        "cta": "open_ended",
+        "cta": "binary_yes_no",
         "evidence": [primary],
         "offer_str": offer_str,
     }
@@ -613,9 +606,12 @@ def _extract_competitor_opened(trigger: Dict, merchant: Dict,
     my_ctr = perf.get("ctr")
     peer_ctr = category.get("peer_stats", {}).get("avg_ctr") if category else None
     if my_ctr and peer_ctr:
-        diff = int((peer_ctr - my_ctr) / peer_ctr * 100) if peer_ctr > my_ctr else 0
-        if diff > 0:
-            supporting.append(f"Your CTR {my_ctr:.3f} is {diff}% below peer — listing needs strengthening")
+            diff = relative_shortfall(my_ctr, peer_ctr)
+            if diff and diff > 0:
+                supporting.append(
+                    f"Your CTR {my_ctr:.3f} is {format_percentage(diff)} below peer "
+                    "(relative shortfall) — listing needs strengthening"
+                )
 
     return {
         "primary_fact": primary,
@@ -637,7 +633,7 @@ def _extract_winback_eligible(trigger: Dict, merchant: Dict,
     dip_pct = payload.get("perf_dip_pct", 0)
     lapsed_since = payload.get("lapsed_customers_added_since_expiry", 0)
 
-    dip_str = fmt_pct(dip_pct)
+    dip_str = format_percentage(dip_pct, semantics="ratio")
     primary = f"Subscription lapsed {days_expired} days ago — performance {dip_str}"
     supporting = []
     if lapsed_since:
@@ -741,7 +737,9 @@ def _extract_dormant_with_vera(trigger: Dict, merchant: Dict,
 
     supporting = []
     if calls_delta and calls_delta < 0:
-        supporting.append(f"Calls {fmt_pct(calls_delta)} this week")
+        supporting.append(
+            f"Calls {format_percentage(calls_delta, semantics='ratio')} this week"
+        )
     if offer_str:
         supporting.append(f"Active offer: {offer_str}")
 
@@ -819,7 +817,7 @@ def _extract_gbp_unverified(trigger: Dict, merchant: Dict,
     path = payload.get("verification_path", "postcard_or_phone_call")
     uplift = payload.get("estimated_uplift_pct", 0.30)
 
-    uplift_str = fmt_pct(uplift)
+    uplift_str = format_percentage(uplift, semantics="ratio")
     primary = f"Google Business Profile is unverified — estimated {uplift_str} visibility uplift on verification"
 
     return {

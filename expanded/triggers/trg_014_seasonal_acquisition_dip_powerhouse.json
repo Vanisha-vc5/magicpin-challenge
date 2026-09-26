@@ -7,7 +7,7 @@
   "customer_id": null,
   "payload": {
     "metric": "views",
-    "delta_pct": -0.3,
+    "delta_pct": -30,
     "window": "7d",
     "is_expected_seasonal": true,
     "season_note": "post_resolution_window_apr_jun"
