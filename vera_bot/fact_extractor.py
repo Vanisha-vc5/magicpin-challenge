@@ -1043,7 +1043,12 @@ def extract_facts(
     trigger_id = trigger.get("id", "")
     merchant_id = merchant.get("merchant_id", "")
     customer_id = customer.get("customer_id") if customer else None
-    suppression_key = trigger.get("suppression_key", f"{kind}:{merchant_id}")
+    payload = trigger.get("payload", {})
+    suppression_key = (
+        trigger.get("suppression_key")
+        or payload.get("suppression_key")
+        or f"{kind}:{merchant_id}"
+    )
     scope = trigger.get("scope", "merchant")
 
     send_as = "vera" if scope == "merchant" else "merchant_on_behalf"

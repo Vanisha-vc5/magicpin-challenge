@@ -256,20 +256,21 @@ class DecisionEngine:
                 continue
 
             # ── 2. Suppression check ──────────────────────────────
-            sup_key = trigger.get("suppression_key", "")
+            trigger_payload = trigger.get("payload", {})
+            sup_key = trigger.get("suppression_key") or trigger_payload.get("suppression_key", "")
             if sup_key and self.sup.is_suppressed(sup_key):
                 logger.debug("Trigger %s suppressed (%s) — skip", tid, sup_key)
                 continue
 
             # ── 3. Merchant resolution ────────────────────────────
-            merchant_id = trigger.get("merchant_id")
+            merchant_id = trigger.get("merchant_id") or trigger_payload.get("merchant_id")
             if not merchant_id:
-                logger.debug("Trigger %s has no merchant_id — skip", tid)
+                logger.info("Trigger %s rejected: missing merchant_id", tid)
                 continue
 
             merchant = self.ctx.get_merchant(merchant_id)
             if not merchant:
-                logger.debug("Merchant %s not found — skip", tid)
+                logger.info("Trigger %s rejected: merchant %s not found", tid, merchant_id)
                 continue
 
             # ── 4. Merchant opt-out check ─────────────────────────
@@ -282,25 +283,30 @@ class DecisionEngine:
             # category may be None for some generated merchants — continue anyway
 
             # ── 6. Customer resolution + consent check ────────────
-            customer_id = trigger.get("customer_id")
+            customer_id = trigger.get("customer_id") or trigger_payload.get("customer_id")
             customer = None
             if customer_id:
                 customer = self.ctx.get_customer(customer_id)
                 if not customer:
-                    logger.debug("Customer %s not found — skip", tid)
+                    logger.info("Trigger %s rejected: customer %s not found", tid, customer_id)
                     continue
 
                 # Consent check
                 trigger_kind = trigger.get("kind", "")
                 if not customer_has_consent(customer, trigger_kind):
-                    logger.debug("Customer %s lacks consent for %s — skip",
-                                 customer_id, trigger_kind)
+                    logger.info(
+                        "Trigger %s rejected: customer %s lacks consent for %s",
+                        tid, customer_id, trigger_kind,
+                    )
                     continue
 
                 # Customer opt_in / reminder_opt_in flag
                 prefs = customer.get("preferences", {})
                 if prefs.get("reminder_opt_in") is False:
-                    logger.debug("Customer %s reminder_opt_in=False — skip", customer_id)
+                    logger.info(
+                        "Trigger %s rejected: customer %s reminder_opt_in=False",
+                        tid, customer_id,
+                    )
                     continue
 
             # ── 7. Score ──────────────────────────────────────────

@@ -12,6 +12,7 @@ Start with: uvicorn app:app --host 0.0.0.0 --port 8080
 """
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import time
@@ -21,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
 from context_store import ContextStore
 from decision_engine import DecisionEngine
@@ -51,6 +53,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger("vera.app")
 
+
+class UTF8JSONResponse(Response):
+    """Serialize API responses as UTF-8 JSON without replacing Unicode."""
+
+    media_type = "application/json"
+
+    def render(self, content: Any) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
 # ─────────────────────────────────────────────
 # Global State (singletons)
 # ─────────────────────────────────────────────
@@ -69,6 +85,7 @@ app = FastAPI(
     title="Vera Bot — Magicpin AI Challenge",
     version="1.0.0",
     description="Merchant engagement AI for Magicpin Vera Challenge",
+    default_response_class=UTF8JSONResponse,
 )
 
 # ─────────────────────────────────────────────

@@ -43,6 +43,13 @@ class SuppressionStore:
         with self._lock:
             self._sent_keys.discard(suppression_key)
 
+    def clear(self):
+        """Clear transient suppression and conversation state."""
+        with self._lock:
+            self._sent_keys.clear()
+            self._merchant_optout.clear()
+            self._conversations.clear()
+
     # ─────────────────────────────────────────
     # Merchant Opt-Out
     # ─────────────────────────────────────────
