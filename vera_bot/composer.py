@@ -749,7 +749,9 @@ def compose_message(
         body = _build_generic_message(brief, strategy, merchant, customer, category)
 
     # Strip any taboo words
-    body = strategy.check_taboos(body)
+    body = strategy.check_taboos(body).replace("—", "-")
+    brief.primary_fact = brief.primary_fact.replace("—", "-")
+    brief.recommended_action = brief.recommended_action.replace("—", "-")
 
     # Enforce single CTA (no multiple "Reply X" lines)
     body = _enforce_single_cta(body)
@@ -783,7 +785,7 @@ def compose_message(
         "cta": cta,
         "send_as": brief.send_as,
         "template_name": template_name,
-        "template_params": template_params,
+        "template_params": [param.replace("—", "-") for param in template_params],
         "suppression_key": brief.suppression_key,
         "rationale": rationale,
     }

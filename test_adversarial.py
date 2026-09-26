@@ -74,6 +74,51 @@ def test_other_delta_values_do_not_double_convert():
         assert "500%" not in result["body"]
 
 
+def test_delta_falls_back_to_current_and_baseline_only_when_missing():
+    merchant = dict(MERCHANT)
+    merchant["offers"] = []
+    category = dict(CATEGORY)
+    category["offer_catalog"] = []
+    trigger = {
+        "id": "derived-delta",
+        "kind": "perf_dip",
+        "merchant_id": merchant["merchant_id"],
+        "payload": {"metric": "calls", "current": 9, "baseline": 18},
+    }
+    brief = extract_facts(trigger, merchant, category, None,
+                          "2026-09-26T10:00:00Z", 5.0)
+    assert "-50%" in brief.primary_fact
+
+
+def test_category_catalog_offer_is_used_without_invention():
+    merchant = dict(MERCHANT)
+    merchant["offers"] = []
+    category = dict(CATEGORY)
+    category["offer_catalog"] = [{"title": "Dental Cleaning ₹299"}]
+    brief, result = make_perf(-50, "")
+    brief = extract_facts(
+        {"id": "catalog-offer", "kind": "perf_dip",
+         "payload": {"metric": "calls", "delta_pct": -50}},
+        merchant, category, None, "2026-09-26T10:00:00Z", 5.0,
+    )
+    result = compose_message(brief, merchant, category, None)
+    assert "Dental Cleaning ₹299" in result["body"]
+
+
+def test_hinglish_and_unicode_offer_are_preserved():
+    merchant = dict(MERCHANT)
+    merchant["offers"] = [{"title": "दांत सफाई ₹999 - weekend offer", "status": "active"}]
+    brief = extract_facts(
+        {"id": "unicode-offer", "kind": "perf_dip",
+         "payload": {"metric": "calls", "delta_pct": 25}},
+        merchant, CATEGORY, None, "2026-09-26T10:00:00Z", 5.0,
+    )
+    result = compose_message(brief, merchant, CATEGORY, None)
+    assert "दांत सफाई ₹999 - weekend offer" in result["body"]
+    assert "â" not in result["body"]
+    assert "25%" in result["body"]
+
+
 def test_offers_and_currency_are_grounded():
     assert format_inr(299) == "₹299"
     assert format_inr(999) == "₹999"

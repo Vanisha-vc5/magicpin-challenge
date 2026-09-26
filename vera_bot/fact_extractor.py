@@ -39,6 +39,19 @@ def get_active_offers(merchant: Dict[str, Any]) -> List[Dict[str, Any]]:
             if o.get("status") == "active"]
 
 
+def get_relevant_offer(merchant: Dict[str, Any],
+                       category: Optional[Dict[str, Any]] = None) -> str:
+    """Use a supplied merchant offer, or a supplied category catalog offer."""
+    merchant_offers = get_active_offers(merchant)
+    if merchant_offers:
+        return merchant_offers[0].get("title", "")
+    if category:
+        for offer in category.get("offer_catalog", []):
+            if offer.get("status", "active") == "active" and offer.get("title"):
+                return offer["title"]
+    return ""
+
+
 def get_owner_name(merchant: Dict[str, Any]) -> str:
     """Extract owner first name from merchant context."""
     identity = merchant.get("identity", {})
@@ -223,13 +236,20 @@ def _extract_perf_dip(trigger: Dict, merchant: Dict,
                        category: Optional[Dict]) -> Dict:
     payload = trigger.get("payload", {})
     metric = payload.get("metric", "calls")
-    delta = payload.get("delta_pct", 0)
+    delta = payload.get("delta_pct")
+    if delta is None:
+        delta = trigger.get("delta_pct")
+    if delta is None:
+        current = payload.get("current", trigger.get("current"))
+        baseline_value = payload.get("baseline", trigger.get("baseline"))
+        if current is not None and baseline_value not in (None, 0):
+            delta = (float(current) - float(baseline_value)) / float(baseline_value) * 100
     window = payload.get("window", "7d")
     baseline = payload.get("vs_baseline", payload.get("baseline"))
 
     delta_str = fmt_pct(delta)
     primary = f"{metric} {delta_str} over {window}"
-    if baseline:
+    if baseline is not None:
         primary += f" vs baseline of {baseline}"
 
     # Peer comparison
@@ -247,8 +267,7 @@ def _extract_perf_dip(trigger: Dict, merchant: Dict,
                     f"({format_percentage(diff)} relative shortfall)"
                 )
 
-    active_offers = get_active_offers(merchant)
-    offer_str = active_offers[0]["title"] if active_offers else ""
+    offer_str = get_relevant_offer(merchant, category)
 
     return {
         "primary_fact": primary,
